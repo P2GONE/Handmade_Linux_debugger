@@ -58,6 +58,34 @@ void debugger_write_registers(debugger_t* dbg, struct user_regs_struct* regs) {
     }
 }
 
+// 명령 단위 실행
+void debugger_single_step(debugger_t* dbg) {
+    int wait_status;
+    if (pt_single_step(dbg->pid) == SUCCESS) {
+        waitpid(dbg->pid, &wait_status, 0);
+        if (WIFSTOPPED(wait_status)) {
+            printf("Single step executed. Signal: %d\n", WSTOPSIG(wait_status));
+        } else {
+            printf("Unexpected status: 0x%x\n", wait_status);
+        }
+    } else {
+        perror("Failed to execute single step");
+    }
+}
+
+// 시그널 읽기
+void debugger_read_signal_info(debugger_t* dbg) {
+    siginfo_t siginfo;
+    if (pt_get_signal_info(dbg->pid, &siginfo) == SUCCESS) {
+        printf("Signal info:\n");
+        printf("  Signal number: %d\n", siginfo.si_signo);
+        printf("  Error number: %d\n", siginfo.si_errno);
+        printf("  Code: %d\n", siginfo.si_code);
+    } else {
+        perror("Failed to get signal info");
+    }
+}
+
 // 디버거 루프 실행 함수
 void debugger_run(debugger_t* dbg) {
     int wait_status;
@@ -105,7 +133,12 @@ void debugger_run(debugger_t* dbg) {
         } else if (strcmp(line, "exit") == 0) {
             printf("Exiting debugger.\n");
             break;
-        } else {
+        } else if (strcmp(line, "single") == 0) {
+            debugger_single_step(dbg);
+        } else if (strcmp(line, "signal") == 0) {
+            debugger_read_signal_info(dbg);
+        
+        }else {
             printf("Unknown command: %s\n", line);
         }
     }
@@ -118,6 +151,8 @@ void my_gdb_menu(){
     printf("[readmem] : read memory\n");
     printf("[writemem] : write memory\n");
     printf("[readregs] : read registers\n");
+    printf("[single] : Execute a single instruction step\n");
+    printf("[signal] :Display the current signal information\n");
     printf("[exit] : program exit\n\n");
 }
 
