@@ -4,6 +4,8 @@
 #include <sys/ptrace.h>
 #include <sys/user.h>
 #include <stdint.h>
+#include <sys/types.h>   // pid_t 정의
+#include <signal.h>      // siginfo_t 정의
 
 // 성공/실패 매크로 정의
 #define SUCCESS 0

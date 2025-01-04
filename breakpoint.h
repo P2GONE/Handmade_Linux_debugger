@@ -11,6 +11,9 @@ typedef struct breakpoint {
     struct breakpoint* next;      // 다음 브레이크포인트로의 포인터
 } breakpoint_t;
 
+// 브레이크포인트 관련 매크로
+#define BREAKPOINT_INT3 0xCC
+
 // 브레이크포인트 관리 함수들
 int set_breakpoint(pid_t pid, breakpoint_t** head, uintptr_t addr);
 int remove_breakpoint(pid_t pid, breakpoint_t** head, uintptr_t addr);

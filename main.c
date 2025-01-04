@@ -10,7 +10,7 @@
 #include <ctype.h>
 
 #include "ptrace.h"
-#include "breakpoint.h"
+#include "breakpoint.h" // 브레이크포인트 헤더 포함
 
 // 디버거 상태를 나타내는 구조체
 typedef struct {
@@ -93,6 +93,21 @@ void debugger_read_signal_info(debugger_t* dbg) {
     }
 }
 
+// 브레이크포인트 설정 함수
+int set_breakpoint_at_addr(debugger_t* dbg, uintptr_t addr) {
+    return set_breakpoint(dbg->pid, &dbg->head, addr);
+}
+
+// 브레이크포인트 제거 함수
+int remove_breakpoint_at_addr(debugger_t* dbg, uintptr_t addr) {
+    return remove_breakpoint(dbg->pid, &dbg->head, addr);
+}
+
+// 브레이크포인트 목록 출력 함수
+void list_current_breakpoints(debugger_t* dbg) {
+    list_breakpoints(dbg->head);
+}
+
 // 명령어 파싱 함수
 int parse_command(char* line, char** args, int max_args) {
     int argc = 0;
@@ -103,6 +118,21 @@ int parse_command(char* line, char** args, int max_args) {
     }
     args[argc] = NULL;
     return argc;
+}
+
+// 메뉴 출력 함수
+void my_gdb_menu(){
+    printf(" My MENU \n");
+    printf("[continue] : program continue\n");
+    printf("[readmem] : read memory\n");
+    printf("[writemem] : write memory\n");
+    printf("[readregs] : read registers\n");
+    printf("[single] : Execute a single instruction step\n");
+    printf("[signal] : Display the current signal information\n");
+    printf("[break] [addr] : set breakpoint at address\n");
+    printf("[delete] [addr] : remove breakpoint at address\n");
+    printf("[bplist] : list all breakpoints\n");
+    printf("[exit] : program exit\n\n");
 }
 
 // 디버거 루프 실행 함수
@@ -203,7 +233,7 @@ void debugger_run(debugger_t* dbg) {
                 continue;
             }
             uintptr_t addr = strtoull(args[1], NULL, 16);
-            set_breakpoint(dbg->pid, &dbg->head, addr);
+            set_breakpoint_at_addr(dbg, addr);
         
         } else if (strcmp(args[0], "delete") == 0 || strcmp(args[0], "d") == 0) {
             if (argc < 2) {
@@ -211,30 +241,15 @@ void debugger_run(debugger_t* dbg) {
                 continue;
             }
             uintptr_t addr = strtoull(args[1], NULL, 16);
-            remove_breakpoint(dbg->pid, &dbg->head, addr);
+            remove_breakpoint_at_addr(dbg, addr);
         
         } else if (strcmp(args[0], "bplist") == 0 || strcmp(args[0], "bp") == 0) {
-            list_breakpoints(dbg->head);
+            list_current_breakpoints(dbg);
         
         } else {
             printf("Unknown command: %s\n", args[0]);
         }
     }
-}
-
-// 메뉴 출력 함수
-void my_gdb_menu(){
-    printf(" My MENU \n");
-    printf("[continue] : program continue\n");
-    printf("[readmem] : read memory\n");
-    printf("[writemem] : write memory\n");
-    printf("[readregs] : read registers\n");
-    printf("[single] : Execute a single instruction step\n");
-    printf("[signal] : Display the current signal information\n");
-    printf("[break] [addr] : set breakpoint at address\n");
-    printf("[delete] [addr] : remove breakpoint at address\n");
-    printf("[bplist] : list all breakpoints\n");
-    printf("[exit] : program exit\n\n");
 }
 
 // 메인 함수
