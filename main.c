@@ -26,11 +26,38 @@ void debugger_init(debugger_t* dbg, const char* prog_name, pid_t pid) {
     dbg->head = NULL;
 }
 
-// 메모리 읽기 함수
-void debugger_read_memory(debugger_t* dbg, uintptr_t addr) {
+// 메모리 읽기 함수 (다양한 크기 지원)
+void debugger_read_memory(debugger_t* dbg, uintptr_t addr, size_t size) {
+    if (size != 1 && size != 2 && size != 4 && size != 8) {
+        printf("Unsupported size: %zu bytes. Supported sizes are 1, 2, 4, or 8 bytes.\n", size);
+        return;
+    }
+
     uint64_t value;
     if (pt_read_memory(dbg->pid, addr, &value) == SUCCESS) {
-        printf("Read memory at 0x%lx: 0x%lx\n", addr, value);
+        uint64_t mask;
+        switch (size) {
+            case 1:
+                mask = 0xFF;
+                break;
+            case 2:
+                mask = 0xFFFF;
+                break;
+            case 4:
+                mask = 0xFFFFFFFF;
+                break;
+            case 8:
+                mask = 0xFFFFFFFFFFFFFFFF;
+                break;
+            default:
+                mask = 0;
+                break;
+        }
+        printf("Read %zu byte%s at 0x%lx: 0x%llx\n", 
+               size, 
+               size > 1 ? "s" : "", 
+               addr, 
+               value & mask);
     } else {
         perror("Failed to read memory");
     }
@@ -45,12 +72,28 @@ void debugger_write_memory(debugger_t* dbg, uintptr_t addr, uint64_t value) {
     }
 }
 
-// 레지스터 읽기 함수
+// 레지스터 읽기 함수 (모든 일반 레지스터 표시)
 void debugger_read_registers(debugger_t* dbg) {
     struct user_regs_struct regs;
     if (pt_read_registers(dbg->pid, &regs) == SUCCESS) {
         printf("Registers read successfully.\n");
-        printf("RIP: 0x%llx\n", regs.rip); // x86_64 예제 (아키텍처에 따라 변경 가능)
+        printf("RIP: 0x%llx\n", regs.rip);
+        printf("RAX: 0x%llx\n", regs.rax);
+        printf("RBX: 0x%llx\n", regs.rbx);
+        printf("RCX: 0x%llx\n", regs.rcx);
+        printf("RDX: 0x%llx\n", regs.rdx);
+        printf("RSI: 0x%llx\n", regs.rsi);
+        printf("RDI: 0x%llx\n", regs.rdi);
+        printf("RSP: 0x%llx\n", regs.rsp);
+        printf("RBP: 0x%llx\n", regs.rbp);
+        printf("R8 : 0x%llx\n", regs.r8);
+        printf("R9 : 0x%llx\n", regs.r9);
+        printf("R10: 0x%llx\n", regs.r10);
+        printf("R11: 0x%llx\n", regs.r11);
+        printf("R12: 0x%llx\n", regs.r12);
+        printf("R13: 0x%llx\n", regs.r13);
+        printf("R14: 0x%llx\n", regs.r14);
+        printf("R15: 0x%llx\n", regs.r15);
     } else {
         perror("Failed to read registers");
     }
@@ -93,17 +136,48 @@ void debugger_read_signal_info(debugger_t* dbg) {
     }
 }
 
-// 브레이크포인트 설정 함수
+// 헥스덤프 메모리 함수
+void debugger_hexdump_memory(debugger_t* dbg, uintptr_t addr, size_t length) {
+    size_t i;
+    uint64_t data;
+    printf("Hexdump of memory at 0x%lx (length: %zu bytes):\n", addr, length);
+    for (i = 0; i < length; i += 8) {
+        if (pt_read_memory(dbg->pid, addr + i, &data) != SUCCESS) {
+            perror("Failed to read memory for hexdump");
+            break;
+        }
+        printf("0x%lx: ", addr + i);
+        size_t j;
+        for (j = 0; j < 8 && (i + j) < length; j++) {
+            printf("%02llx ", (data >> (j * 8)) & 0xFF);
+        }
+        printf("\n");
+    }
+}
+
+// 스택 메모리 덤프 함수
+void debugger_stack_dump(debugger_t* dbg, size_t length) {
+    struct user_regs_struct regs;
+    if (pt_read_registers(dbg->pid, &regs) != SUCCESS) {
+        perror("Failed to read registers for stack dump");
+        return;
+    }
+    uintptr_t rsp = regs.rsp;
+    printf("Stack dump (RSP = 0x%lx, length: %zu bytes):\n", rsp, length);
+    debugger_hexdump_memory(dbg, rsp, length);
+}
+
+// 브레이크포인트 설정 함수 (별도 함수로 래핑)
 int set_breakpoint_at_addr(debugger_t* dbg, uintptr_t addr) {
     return set_breakpoint(dbg->pid, &dbg->head, addr);
 }
 
-// 브레이크포인트 제거 함수
+// 브레이크포인트 제거 함수 (별도 함수로 래핑)
 int remove_breakpoint_at_addr(debugger_t* dbg, uintptr_t addr) {
     return remove_breakpoint(dbg->pid, &dbg->head, addr);
 }
 
-// 브레이크포인트 목록 출력 함수
+// 브레이크포인트 목록 출력 함수 (별도 함수로 래핑)
 void list_current_breakpoints(debugger_t* dbg) {
     list_breakpoints(dbg->head);
 }
@@ -124,9 +198,11 @@ int parse_command(char* line, char** args, int max_args) {
 void my_gdb_menu(){
     printf(" My MENU \n");
     printf("[continue] : program continue\n");
-    printf("[readmem] : read memory\n");
-    printf("[writemem] : write memory\n");
+    printf("[readmem] <addr> [size] : read memory (size: 1,2,4,8 bytes)\n");
+    printf("[writemem] <addr> <value> : write memory\n");
     printf("[readregs] : read registers\n");
+    printf("[hexdump] <addr> [length] : hexdump memory\n");
+    printf("[stackdump] [length] : dump stack memory (default: 64 bytes)\n");
     printf("[single] : Execute a single instruction step\n");
     printf("[signal] : Display the current signal information\n");
     printf("[break] [addr] : set breakpoint at address\n");
@@ -199,12 +275,17 @@ void debugger_run(debugger_t* dbg) {
 
         } else if (strcmp(args[0], "readmem") == 0) {
             if (argc < 2) {
-                printf("Usage: readmem <address>\n");
+                printf("Usage: readmem <address> [size]\n");
+                printf("Size can be 1, 2, 4, or 8 bytes. Default is 8.\n");
                 continue;
             }
             uintptr_t addr = strtoull(args[1], NULL, 16);
-            debugger_read_memory(dbg, addr);
-        
+            size_t size = 8; // 기본 크기
+            if (argc >= 3) {
+                size = strtoull(args[2], NULL, 10);
+            }
+            debugger_read_memory(dbg, addr, size);
+
         } else if (strcmp(args[0], "writemem") == 0) {
             if (argc < 3) {
                 printf("Usage: writemem <address> <value>\n");
@@ -213,20 +294,36 @@ void debugger_run(debugger_t* dbg) {
             uintptr_t addr = strtoull(args[1], NULL, 16);
             uint64_t value = strtoull(args[2], NULL, 16);
             debugger_write_memory(dbg, addr, value);
-        
+
         } else if (strcmp(args[0], "readregs") == 0) {
             debugger_read_registers(dbg);
-        
-        } else if (strcmp(args[0], "exit") == 0) {
-            printf("Exiting debugger.\n");
-            break;
-        
+
+        } else if (strcmp(args[0], "hexdump") == 0) {
+            if (argc < 2) {
+                printf("Usage: hexdump <address> [length]\n");
+                printf("Length is in bytes. Default is 64.\n");
+                continue;
+            }
+            uintptr_t addr = strtoull(args[1], NULL, 16);
+            size_t length = 64; // 기본 길이
+            if (argc >= 3) {
+                length = strtoull(args[2], NULL, 10);
+            }
+            debugger_hexdump_memory(dbg, addr, length);
+
+        } else if (strcmp(args[0], "stackdump") == 0) {
+            size_t length = 64; // 기본 길이
+            if (argc >= 2) {
+                length = strtoull(args[1], NULL, 10);
+            }
+            debugger_stack_dump(dbg, length);
+
         } else if (strcmp(args[0], "single") == 0) {
             debugger_single_step(dbg);
-        
+
         } else if (strcmp(args[0], "signal") == 0) {
             debugger_read_signal_info(dbg);
-        
+
         } else if (strcmp(args[0], "break") == 0 || strcmp(args[0], "b") == 0) {
             if (argc < 2) {
                 printf("Usage: break <address>\n");
@@ -234,7 +331,7 @@ void debugger_run(debugger_t* dbg) {
             }
             uintptr_t addr = strtoull(args[1], NULL, 16);
             set_breakpoint_at_addr(dbg, addr);
-        
+
         } else if (strcmp(args[0], "delete") == 0 || strcmp(args[0], "d") == 0) {
             if (argc < 2) {
                 printf("Usage: delete <address>\n");
@@ -242,10 +339,10 @@ void debugger_run(debugger_t* dbg) {
             }
             uintptr_t addr = strtoull(args[1], NULL, 16);
             remove_breakpoint_at_addr(dbg, addr);
-        
+
         } else if (strcmp(args[0], "bplist") == 0 || strcmp(args[0], "bp") == 0) {
             list_current_breakpoints(dbg);
-        
+
         } else {
             printf("Unknown command: %s\n", args[0]);
         }
