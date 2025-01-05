@@ -1,7 +1,7 @@
 // test.c
 #include <stdio.h>
 
-int input_finc(){
+int input_func(){
         long  v1;
         if ( (unsigned int)__isoc99_scanf("%ld", &v1) != 1 )
                 _exit(1);
