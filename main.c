@@ -10,7 +10,8 @@
 #include <ctype.h>
 
 #include "ptrace.h"
-#include "breakpoint.h" // 브레이크포인트 헤더 포함
+#include "breakpoint.h" 
+#include "disass.h" 
 
 // 디버거 상태를 나타내는 구조체
 typedef struct {
@@ -194,6 +195,10 @@ int parse_command(char* line, char** args, int max_args) {
     return argc;
 }
 
+// 디스어셈블 함수 선언 (헤더 파일 사용)
+extern void disassemble(const char* prog_path, uintptr_t addr, size_t count);
+
+
 // 메뉴 출력 함수
 void my_gdb_menu(){
     printf(" My MENU \n");
@@ -210,6 +215,7 @@ void my_gdb_menu(){
     printf("[bplist] : list all breakpoints\n");
     printf("[exit] : program exit\n\n");
 }
+
 
 // 디버거 루프 실행 함수
 void debugger_run(debugger_t* dbg) {
