@@ -331,29 +331,112 @@ void debugger_run(debugger_t* dbg) {
             debugger_read_signal_info(dbg);
 
         } else if (strcmp(args[0], "break") == 0 || strcmp(args[0], "b") == 0) {
-            if (argc < 2) {
-                printf("Usage: break <address>\n");
-                continue;
-            }
-            uintptr_t addr = strtoull(args[1], NULL, 16);
-            set_breakpoint_at_addr(dbg, addr);
+                if (argc < 2) {
+                    printf("Usage: break <address_or_symbol>\n");
+                    continue;
+                }
+                uintptr_t addr = 0;
+                int is_symbol = 0;
 
-        } else if (strcmp(args[0], "delete") == 0 || strcmp(args[0], "d") == 0) {
-            if (argc < 2) {
-                printf("Usage: delete <address>\n");
-                continue;
-            }
-            uintptr_t addr = strtoull(args[1], NULL, 16);
-            remove_breakpoint_at_addr(dbg, addr);
+                // 주소인지 심볼 이름인지 확인
+                if (strncmp(args[1], "0x", 2) == 0 || strncmp(args[1], "0X", 2) == 0) {
+                    // 주소로 간주
+                    addr = strtoull(args[1], NULL, 16);
+                } else {
+                    // 심볼 이름으로 간주하고 주소로 변환
+                    if (get_symbol_address(dbg->prog_name, args[1], &addr) != 0) {
+                        printf("Failed to resolve symbol '%s'\n", args[1]);
+                        continue;
+                    }
+                    is_symbol = 1;
+                }
 
-        } else if (strcmp(args[0], "bplist") == 0 || strcmp(args[0], "bp") == 0) {
-            list_current_breakpoints(dbg);
+                if (set_breakpoint_at_addr(dbg, addr) == 0) {
+                    if (is_symbol) {
+                        printf("Setting breakpoint at symbol '%s' (0x%lx)\n", args[1], addr);
+                    } else {
+                        printf("Setting breakpoint at address 0x%lx\n", addr);
+                    }
+                } else {
+                    printf("Failed to set breakpoint at 0x%lx\n", addr);
+                }
 
-        } else {
-            printf("Unknown command: %s\n", args[0]);
-        }
+            } else if (strcmp(args[0], "delete") == 0 || strcmp(args[0], "d") == 0) {
+                if (argc < 2) {
+                    printf("Usage: delete <address_or_symbol>\n");
+                    continue;
+                }
+                uintptr_t addr = 0;
+                int is_symbol = 0;
+
+                // 주소인지 심볼 이름인지 확인
+                if (strncmp(args[1], "0x", 2) == 0 || strncmp(args[1], "0X", 2) == 0) {
+                    // 주소로 간주
+                    addr = strtoull(args[1], NULL, 16);
+                } else {
+                    // 심볼 이름으로 간주하고 주소로 변환
+                    if (get_symbol_address(dbg->prog_name, args[1], &addr) != 0) {
+                        printf("Failed to resolve symbol '%s'\n", args[1]);
+                        continue;
+                    }
+                    is_symbol = 1;
+                }
+
+                if (remove_breakpoint_at_addr(dbg, addr) == 0) {
+                    if (is_symbol) {
+                        printf("Removed breakpoint at symbol '%s' (0x%lx)\n", args[1], addr);
+                    } else {
+                        printf("Removed breakpoint at address 0x%lx\n", addr);
+                    }
+                } else {
+                    printf("Failed to remove breakpoint at 0x%lx\n", addr);
+                }
+
+            } else if (strcmp(args[0], "bplist") == 0 || strcmp(args[0], "bp") == 0) {
+                list_current_breakpoints(dbg);
+            } else if (strcmp(args[0], "disassemble") == 0 || strcmp(args[0], "disasm") == 0) {
+                if (argc < 2) {
+                    printf("Usage: disassemble <address_or_symbol> [count]\n");
+                    printf("Count is the number of instructions to disassemble. Default is 5.\n");
+                    continue;
+                }
+                uintptr_t addr = 0;
+                int is_symbol = 0;
+
+                // 주소인지 심볼 이름인지 확인
+                if (strncmp(args[1], "0x", 2) == 0 || strncmp(args[1], "0X", 2) == 0) {
+                    // 주소로 간주
+                    addr = strtoull(args[1], NULL, 16);
+                } else {
+                    // 심볼 이름으로 간주하고 주소로 변환
+                    if (get_symbol_address(dbg->prog_name, args[1], &addr) != 0) {
+                        printf("Failed to resolve symbol '%s'\n", args[1]);
+                        continue;
+                    }
+                    is_symbol = 1;
+                }
+
+                size_t count = 5; // 기본 명령어 개수
+                if (argc >= 3) {
+                    count = strtoull(args[2], NULL, 10);
+                }
+
+                if (is_symbol) {
+                    printf("Disassembling symbol '%s' (0x%lx):\n", args[1], addr);
+                } else {
+                    printf("Disassembling at address 0x%lx:\n", addr);
+                }
+
+                // GNU objdump를 사용하는 경우:
+                disassemble_objdump(dbg->prog_name, addr, count);
+
+                // Zydis를 사용하는 경우:
+                // disassemble_zydis(dbg->prog_name, addr, count);
+            } 
     }
 }
+
+
 
 // 메인 함수
 int main(int argc, char* argv[]) {
