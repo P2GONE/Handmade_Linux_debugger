@@ -215,6 +215,7 @@ void my_gdb_menu(){
     printf("[bplist] : list all breakpoints\n");
     printf("[exit] : program exit\n\n");
 }
+extern void disassemble_objdump(const char* prog_path, uintptr_t addr, size_t count);
 
 
 // 디버거 루프 실행 함수
