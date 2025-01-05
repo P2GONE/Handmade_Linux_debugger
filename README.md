@@ -1,7 +1,8 @@
 # Handmade_Linux_debugger
-
-new_debugger.c 빌드하고 쓰시면 됩니다.
-
+## Build
+```
+gcc -o my_debugger main.c ptrace.c breakpoint.c -Wall
+```
 ### Running
-./debugger executable_file
+./my_debugger ./target_file
 
