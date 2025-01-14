@@ -23,7 +23,7 @@ void leak_rip() {
 int input_num()
 {
     char s[80];
-    //FSB Point!
+    //suspicious 
     if(scanf("%80s", s) !=1)
         exit(1);
     return puts(s);
