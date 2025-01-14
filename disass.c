@@ -1,109 +1,70 @@
-// disassemble.c
-#include "disass.h"
+#include "disass.h" // 헤더 파일 이름을 일치시킵니다.
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
-// 디스어셈블 함수 구현 (GNU objdump 사용)
-void disassemble(const char* prog_path, uintptr_t addr, size_t count) {
-    if (prog_path == NULL) {
-        fprintf(stderr, "Program path is NULL.\n");
-        return;
-    }
-
-    // objdump 명령어 구성
-    // -d: 디스어셈블, -j .text: .text 섹션만
-    // grep을 사용하여 특정 주소에서 시작하는 라인과 그 이후 라인 출력
-    char command[512];
-    snprintf(command, sizeof(command),
-             "objdump -d -j .text %s | grep -A %zu '^%lx:'",
-             prog_path, count, addr);
-
-    // 명령어 실행
-    FILE* pipe = popen(command, "r");
-    if (!pipe) {
-        perror("objdump failed");
-        return;
-    }
-
-    // 출력 결과 읽기
-    char buffer[512];
-    printf("Disassembly at 0x%lx:\n", addr);
-    while (fgets(buffer, sizeof(buffer), pipe)) {
-        printf("%s", buffer);
-    }
-
-    pclose(pipe);
-}
-
-// 심볼 이름을 주소로 변환하는 함수 구현
-int get_symbol_address(const char* prog_path, const char* symbol, uintptr_t* addr) {
-    if (prog_path == NULL || symbol == NULL || addr == NULL) {
-        fprintf(stderr, "Invalid arguments to get_symbol_address.\n");
-        return -1;
-    }
-
-    // nm 명령어를 사용하여 심볼의 주소를 가져옵니다.
-    // -n 옵션은 주소 순으로 정렬하지 않으며, 특정 심볼을 검색합니다.
-    char command[512];
-    snprintf(command, sizeof(command), "nm %s | grep ' %s$'", prog_path, symbol);
-
-    FILE* pipe = popen(command, "r");
-    if (!pipe) {
-        perror("popen failed");
-        return -1;
-    }
-
-    char buffer[512];
-    if (fgets(buffer, sizeof(buffer), pipe) == NULL) {
-        // 심볼을 찾지 못함
-        pclose(pipe);
-        fprintf(stderr, "Symbol '%s' not found in %s.\n", symbol, prog_path);
-        return -1;
-    }
-
-    pclose(pipe);
-
-    // 출력 형식: 주소 심볼
-    // 예: 0000000000401136 T main
-    uintptr_t symbol_addr = 0;
-    char symbol_type;
-    if (sscanf(buffer, "%lx %c %s", &symbol_addr, &symbol_type, buffer) < 1) {
-        fprintf(stderr, "Failed to parse nm output for symbol '%s'.\n", symbol);
-        return -1;
-    }
-
-    *addr = symbol_addr;
+// 디스어셈블러 초기화 함수 (필요 시 구현)
+int disassemble_init() {
+    // 현재는 초기화 작업이 필요 없으므로 성공 반환
     return 0;
 }
 
-// GNU objdump를 활용한 디스어셈블 함수
-void disassemble_objdump(const char* prog_path, uintptr_t addr, size_t count) {
-    if (prog_path == NULL) {
-        fprintf(stderr, "Program path is NULL.\n");
-        return;
-    }
+// 디스어셈블러 종료 함수 (필요 시 구현)
+void disassemble_cleanup() {
+    // 현재는 종료 작업이 필요 없으므로 빈 함수
+}
 
-    // objdump 명령어 구성
-    // -d: 디스어셈블, -j .text: .text 섹션만
-    // grep을 사용하여 특정 주소에서 시작하는 라인과 그 이후 라인 출력
+// objdump를 활용한 디스어셈블 함수 구현
+void disassemble_objdump(const char* exe_path, uintptr_t addr, size_t count) {
+    // 디스어셈블할 주소를 헥사 문자열로 변환 (콜론 포함)
+    char addr_str[20];
+    snprintf(addr_str, sizeof(addr_str), " %lx:", addr);
+
+    // 디스어셈블할 주소 범위 설정 (예: 5개의 명령어를 대략 80바이트)
+    uintptr_t stop_addr = addr + (count * 16); // 명령어당 최대 16바이트 가정
     char command[512];
     snprintf(command, sizeof(command),
-             "objdump -d -j .text %s | grep -A %zu '^%lx:'",
-             prog_path, count, addr);
+             "objdump -d --start-address=0x%lx --stop-address=0x%lx %s",
+             addr, stop_addr, exe_path);
 
     // 명령어 실행
     FILE* pipe = popen(command, "r");
     if (!pipe) {
-        perror("objdump failed");
+        perror("popen failed");
         return;
     }
 
     // 출력 결과 읽기
     char buffer[512];
     printf("Disassembly at 0x%lx:\n", addr);
+    int found = 0;
+    size_t printed = 0;
+
     while (fgets(buffer, sizeof(buffer), pipe)) {
-        printf("%s", buffer);
+        // 특정 주소에서 시작하는 라인만 찾기
+        if (strstr(buffer, addr_str)) {
+            printf("%s", buffer);
+            found = 1;
+            continue;
+        }
+
+        // 찾은 이후의 명령어 라인 출력
+        if (found && strncmp(buffer, " ", 1) == 0) {
+            printf("%s", buffer);
+            printed++;
+            if (printed >= count)
+                break;
+        }
+
+        // 다른 함수의 시작 라인이 나오면 중단
+        if (found && strncmp(buffer, " ", 1) != 0) {
+            break;
+        }
+    }
+
+    if (!found) {
+        printf("No disassembly found at 0x%lx.\n", addr);
     }
 
     pclose(pipe);
